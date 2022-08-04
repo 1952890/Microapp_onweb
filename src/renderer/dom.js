@@ -1,18 +1,11 @@
-
-/** Events that should not be proxied into the Worker's DOM */
-const EVENT_BLACKLIST = 'mousewheel wheel animationstart animationiteration animationend devicemotion deviceorientation deviceorientationabsolute'.split(' ');
-
-
-/** Options for global addEventListener */
-const EVENT_OPTS = {
+const NOWORKER = 'mousewheel wheel animationstart animationiteration animationend devicemotion deviceorientation deviceorientationabsolute'.split(' ');
+/** VDOM to worker
+ *	@param {Worker} opts.worker		
+ */
+ const OPTIONS = {
 	capture: true,
 	passive: true
 };
-
-
-/** Sets up a bidirectional DOM Mutation+Event proxy to a Workerized app.
- *	@param {Worker} opts.worker		The WebWorker instance to proxy to.
- */
 export default ({ worker }) => {
 	const NODES = new Map();
 
@@ -37,8 +30,8 @@ export default ({ worker }) => {
 	// eslint-disable-next-line guard-for-in
 	for (let i in window) {
 		let m = i.substring(2);
-		if (i.substring(0,2)==='on' && i===i.toLowerCase() && EVENT_BLACKLIST.indexOf(m)<0 && (window[i]===null || typeof window[i]==='function')) {
-			addEventListener(m, proxyEvent, supportsPassive ? EVENT_OPTS : true);
+		if (i.substring(0,2)==='on' && i===i.toLowerCase() && NOWORKER.indexOf(m)<0 && (window[i]===null || typeof window[i]==='function')) {
+			addEventListener(m, DomToWorker, supportsPassive ? OPTIONS : true);
 		}
 	}
 
@@ -46,13 +39,13 @@ export default ({ worker }) => {
 	let touch;
 
 	/** Derives {pageX,pageY} coordinates from a mouse or touch event. */
-	function getTouch(e) {
+	function coordinatesGet(e) {
 		let t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]) || e;
 		return t && { pageX: t.pageX, pageY: t.pageY };
 	}
 
 	/** Forward a DOM Event into the Worker as a message */
-	function proxyEvent(e) {
+	function DomToWorker(e) {
 		if (e.type==='click' && touch) return false;
 
 		let event = { type: e.type };
@@ -71,10 +64,10 @@ export default ({ worker }) => {
 		});
 
 		if (e.type==='touchstart') {
-			touch = getTouch(e);
+			touch = coordinatesGet(e);
 		}
 		else if (e.type==='touchend' && touch) {
-			let t = getTouch(e);
+			let t = coordinatesGet(e);
 			if (t) {
 				let delta = Math.sqrt( Math.pow(t.pageX - touch.pageX, 2) + Math.pow(t.pageY - touch.pageY, 2) );
 				if (delta<10) {
@@ -166,7 +159,7 @@ export default ({ worker }) => {
 
 
 	/** Apply a MutationRecord to the DOM */
-	function applyMutation(mutation) {
+	function MutationToDom(mutation) {
 		MUTATIONS[mutation.type](mutation);
 	}
 
@@ -221,15 +214,15 @@ export default ({ worker }) => {
 			}
 
 			// remove mutation from the queue and apply it:
-			applyMutation(q.splice(i--, 1)[0]);
+			MutationToDom(q.splice(i--, 1)[0]);
 		}
 
 		// still remaining work to be done
-		if (q.length) doProcessMutationQueue();
+		if (q.length) PQueue();
 	}
 
 
-	function doProcessMutationQueue() {
+	function PQueue() {
 		// requestAnimationFrame(processMutationQueue);
 		clearTimeout(timer);
 		timer = setTimeout(processMutationQueue, 100);
@@ -256,7 +249,7 @@ export default ({ worker }) => {
 			}
 		}
 		if (MUTATION_QUEUE.push(mutation)===1) {
-			doProcessMutationQueue();
+			PQueue();
 		}
 	}
 
